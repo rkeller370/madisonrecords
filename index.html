@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>State of Madison | Records Search</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: "Inter", sans-serif; }
+    [x-cloak] { display: none !important; }
+    .loading-spinner {
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #5F9EA0;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-[#F4F5F7] text-[#1F1F1F] antialiased" x-data="recordsSearch()" x-init="init()">
+
+  <header class="bg-white border-b border-[#E1E4E8] px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+    <div class="flex items-center space-x-4">
+      <div class="h-8 w-1 bg-[#5F9EA0]"></div>
+      <div>
+        <h1 class="text-sm font-semibold uppercase tracking-wider text-[#918FB4]">State of Madison</h1>
+        <p class="text-xs text-[#6B6B6B]">Records & Citation Search</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto py-10 px-6 grid grid-cols-12 gap-8">
+    <nav class="col-span-3 space-y-1">
+      <div class="bg-white border-l-4 border-l-[#5F9EA0] border border-[#E1E4E8] text-[#5F9EA0] px-4 py-3 rounded-[4px] text-sm font-medium">
+        Records Search
+      </div>
+      <div class="pt-4 mt-2 border-t border-gray-200">
+        <p class="text-xs uppercase font-bold text-[#6B6B6B] tracking-wider px-4 mb-2">info</p>
+        <p class="text-xs text-gray-500 px-4 leading-relaxed">Search by Roblox username or User ID. Display includes arrests, citations, vehicles, and license statuses.</p>
+      </div>
+      <template x-if="errorMessage">
+        <div class="mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded-[4px]">
+          <p class="text-xs text-red-600 font-medium" x-text="errorMessage"></p>
+        </div>
+      </template>
+    </nav>
+
+    <div class="col-span-9 space-y-6">
+      <div x-show="isLoading" x-cloak class="flex items-center justify-center h-64">
+        <div class="text-center">
+          <div class="loading-spinner mx-auto mb-4" style="width:40px;height:40px"></div>
+          <p class="text-gray-500">Searching records...</p>
+        </div>
+      </div>
+
+      <div x-show="!isLoading" x-cloak class="space-y-6">
+        <section class="bg-white border border-[#E1E4E8] rounded-[4px] overflow-hidden">
+          <div class="px-6 py-4 border-b border-[#E1E4E8] bg-gray-50">
+            <h2 class="text-sm font-bold uppercase italic text-[#1F1F1F]">Player Records Search</h2>
+            <p class="text-xs text-gray-500 mt-1">Enter Roblox username or User ID to pull records</p>
+          </div>
+          <div class="p-6">
+            <div class="flex items-end gap-3">
+              <div class="flex-1">
+                <label class="block text-xs font-bold text-[#6B6B6B] mb-1 uppercase tracking-tight">Username / User ID</label>
+                <input type="text" x-model="searchQuery" @keyup.enter="performSearch" placeholder="e.g., RobotPlayer123 or 123456789" class="w-full border border-gray-300 p-2 text-sm rounded-[4px] focus:ring-1 focus:ring-[#5F9EA0] outline-none" />
+              </div>
+              <button @click="performSearch" :disabled="!searchQuery.trim() || isLoading" class="px-5 py-2 bg-[#5F9EA0] text-white text-sm font-medium rounded-[4px] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
+                Search
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <template x-if="searchPerformed && searchResult">
+          <div class="space-y-6">
+            <div class="bg-white border border-[#E1E4E8] rounded-[4px] p-4 flex items-center space-x-4">
+              <template x-if="searchResult.avatar">
+                <img :src="searchResult.avatar" class="h-10 w-10 rounded-full object-cover" />
+              </template>
+              <template x-if="!searchResult.avatar">
+                <div class="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 uppercase font-bold" x-text="searchResult.username?.charAt(0) || '?'"></div>
+              </template>
+              <div>
+                <h3 class="text-lg font-semibold" x-text="searchResult.username || 'Unknown'"></h3>
+                <p class="text-xs text-gray-500">User ID: <span x-text="searchResult.userId || '—'"></span></p>
+              </div>
+            </div>
+
+            <section class="bg-white border border-[#E1E4E8] rounded-[4px] overflow-hidden">
+              <div class="px-6 py-4 border-b border-[#E1E4E8] bg-gray-50">
+                <h2 class="text-sm font-bold uppercase italic text-[#1F1F1F]">License & Certification Status</h2>
+              </div>
+              <div class="divide-y divide-[#E1E4E8]">
+                <template x-for="lic in searchResult.licenses" :key="lic.type">
+                  <div class="px-6 py-3 flex items-center justify-between">
+                    <span class="text-sm text-[#1F1F1F]" x-text="lic.type"></span>
+                    <span class="text-[10px] font-bold px-2 py-1 rounded uppercase flex-shrink-0"
+                      :class="{
+                        'bg-green-100 text-green-700': lic.status === 'ACTIVE' || lic.status === 'VALID' || lic.status === 'ISSUED',
+                        'bg-red-100 text-red-700': lic.status === 'SUSPENDED' || lic.status === 'REVOKED' || lic.status === 'EXPIRED',
+                        'bg-gray-100 text-gray-500': lic.status === 'NONE' || lic.status === 'NOT ISSUED'
+                      }"
+                      x-text="lic.status"></span>
+                  </div>
+                </template>
+              </div>
+            </section>
+
+            <section class="bg-white border border-[#E1E4E8] rounded-[4px] overflow-hidden">
+              <div class="px-6 py-4 border-b border-[#E1E4E8] bg-gray-50 flex justify-between items-center">
+                <div>
+                  <h2 class="text-sm font-bold uppercase italic text-[#1F1F1F]">Arrest Records</h2>
+                  <p class="text-[10px] text-gray-400 mt-1">Click a row to expand officer narrative</p>
+                </div>
+                <span class="text-[10px] font-bold text-gray-400 uppercase" x-text="searchResult.arrests?.length + ' Total'"></span>
+              </div>
+              <template x-if="searchResult.arrests?.length > 0">
+                <div class="divide-y divide-[#E1E4E8]">
+                  <template x-for="arrest in searchResult.arrests" :key="arrest.recordId">
+                    <div>
+                      <div class="px-6 py-4 flex items-start gap-3 cursor-pointer hover:bg-gray-50" @click="toggleExpanded('arrests', arrest.recordId)">
+                        <div class="mt-1 text-gray-400 flex-shrink-0">
+                          <svg :class="expandedArrests.includes(arrest.recordId) ? 'rotate-90' : ''" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                        <div class="flex-1">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-sm font-medium" x-text="arrest.charges?.join(', ')"></span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded border uppercase"
+                              :class="{
+                                'bg-red-100 text-red-700 border-red-200': arrest.classification === 'felony' || arrest.classification === 'capital',
+                                'bg-orange-100 text-orange-700 border-orange-200': arrest.classification === 'misdemeanor',
+                                'bg-blue-100 text-blue-700 border-blue-200': arrest.classification === 'infraction'
+                              }"
+                              x-text="arrest.classification"></span>
+                            <template x-if="arrest.duration">
+                              <span class="text-[10px] text-gray-500" x-text="arrest.duration + ' min'"></span>
+                            </template>
+                          </div>
+                          <div class="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                            <span x-text="formatDate(arrest.date)"></span>
+                            <span>·</span>
+                            <span x-text="arrest.officerName || ('Officer #' + arrest.officerId)"></span>
+                            <span>·</span>
+                            <span class="font-mono" x-text="'#' + arrest.recordId.slice(-6).toUpperCase()"></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div x-show="expandedArrests.includes(arrest.recordId)" class="px-6 py-4 bg-gray-50 border-t border-[#E1E4E8]">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 mb-1">Officer Narrative</p>
+                        <p class="text-xs text-gray-600 leading-relaxed" x-text="arrest.officerDescription || 'No narrative provided.'"></p>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!searchResult.arrests?.length">
+                <div class="text-center py-10">
+                  <p class="text-gray-500 text-sm">No arrest records found.</p>
+                </div>
+              </template>
+            </section>
+
+            <section class="bg-white border border-[#E1E4E8] rounded-[4px] overflow-hidden">
+              <div class="px-6 py-4 border-b border-[#E1E4E8] bg-gray-50 flex justify-between items-center">
+                <h2 class="text-sm font-bold uppercase italic text-[#1F1F1F]">Traffic Citations</h2>
+                <span class="text-[10px] font-bold text-gray-400 uppercase" x-text="searchResult.citations?.length + ' Total'"></span>
+              </div>
+              <template x-if="searchResult.citations?.length > 0">
+                <div class="divide-y divide-[#E1E4E8]">
+                  <template x-for="citation in searchResult.citations" :key="citation.recordId">
+                    <div>
+                      <div class="px-6 py-4 flex items-start gap-3 cursor-pointer hover:bg-gray-50" @click="toggleExpanded('citations', citation.recordId)">
+                        <div class="mt-1 text-gray-400 flex-shrink-0">
+                          <svg :class="expandedCitations.includes(citation.recordId) ? 'rotate-90' : ''" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                        <div class="flex-1">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-sm font-medium" x-text="citation.charges?.join(', ')"></span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded border bg-blue-100 text-blue-700 border-blue-200 uppercase" x-text="citation.classification"></span>
+                            <template x-if="citation.cost != null">
+                              <span class="text-[10px] font-bold text-[#5F9EA0] font-mono" x-text="'$' + citation.cost"></span>
+                            </template>
+                          </div>
+                          <div class="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                            <span x-text="formatDate(citation.date)"></span>
+                            <span>·</span>
+                            <span x-text="citation.officerName || ('Officer #' + citation.officerId)"></span>
+                            <span>·</span>
+                            <span class="font-mono" x-text="'#' + citation.recordId.slice(-6).toUpperCase()"></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div x-show="expandedCitations.includes(citation.recordId)" class="px-6 py-4 bg-gray-50 border-t border-[#E1E4E8]">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 mb-1">Citation Details</p>
+                        <p class="text-xs text-gray-600 leading-relaxed" x-text="citation.officerDescription || 'No details provided.'"></p>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!searchResult.citations?.length">
+                <div class="text-center py-10">
+                  <p class="text-gray-500 text-sm">No citations on record.</p>
+                </div>
+              </template>
+            </section>
+
+            <section class="bg-white border border-[#E1E4E8] rounded-[4px] overflow-hidden">
+              <div class="px-6 py-4 border-b border-[#E1E4E8] bg-gray-50">
+                <h2 class="text-sm font-bold uppercase italic text-[#1F1F1F]">Registered Vehicles</h2>
+              </div>
+              <div class="p-6">
+                <template x-if="searchResult.vehicles?.length > 0">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <template x-for="vehicle in searchResult.vehicles" :key="vehicle.plate">
+                      <div class="border border-gray-200 rounded-[4px] p-3 flex items-start space-x-3 bg-white">
+                        <div class="w-10 h-10 bg-gray-50 border border-gray-100 rounded flex items-center justify-center text-[#918FB4] text-[10px] font-bold uppercase">Veh</div>
+                        <div>
+                          <p class="text-sm font-medium" x-text="[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Unknown Vehicle'"></p>
+                          <p class="text-[10px] text-gray-500 uppercase tracking-widest font-bold mt-0.5">Plate: <span class="text-[#1F1F1F]" x-text="vehicle.plate"></span></p>
+                          <template x-if="vehicle.color">
+                            <p class="text-[10px] text-gray-400 mt-0.5" x-text="vehicle.color"></p>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+                <template x-if="!searchResult.vehicles?.length">
+                  <div class="text-center py-6">
+                    <p class="text-gray-500 text-sm">No vehicles registered.</p>
+                  </div>
+                </template>
+              </div>
+            </section>
+          </div>
+        </template>
+
+        <template x-if="searchPerformed && !searchResult && !isLoading">
+          <section class="bg-white border border-[#E1E4E8] rounded-[4px] p-10 text-center">
+            <p class="text-gray-500">No player found with that criteria.</p>
+            <p class="text-sm text-gray-400 mt-2">Check the username/ID and try again.</p>
+          </section>
+        </template>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = 'https://api.stateofmadison.com/api/v1';
+
+    async function resolveRobloxUser(query) {
+      const isNumeric = /^\d+$/.test(query.trim());
+      if (isNumeric) {
+        return { userId: query.trim() };
+      }
+      const res = await fetch(`https://api.roproxy.com/v1/usernames/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames: [query.trim()], excludeBannedUsers: false })
+      });
+      if (!res.ok) throw new Error('Failed to resolve username');
+      const data = await res.json();
+      if (!data.data || data.data.length === 0) return null;
+      return { userId: String(data.data[0].id), username: data.data[0].name };
+    }
+
+    function recordsSearch() {
+      return {
+        isLoading: false,
+        searchQuery: '',
+        searchPerformed: false,
+        searchResult: null,
+        expandedArrests: [],
+        expandedCitations: [],
+        errorMessage: null,
+
+        init() {},
+
+        toggleExpanded(type, id) {
+          const key = type === 'arrests' ? 'expandedArrests' : 'expandedCitations';
+          if (this[key].includes(id)) {
+            this[key] = this[key].filter(i => i !== id);
+          } else {
+            this[key].push(id);
+          }
+        },
+
+        async performSearch() {
+          if (!this.searchQuery.trim()) return;
+          this.isLoading = true;
+          this.searchPerformed = true;
+          this.searchResult = null;
+          this.errorMessage = null;
+          this.expandedArrests = [];
+          this.expandedCitations = [];
+
+          try {
+            //const resolved = await resolveRobloxUser(this.searchQuery.trim());
+            //if (!resolved) {
+              //this.searchResult = null;
+             // this.isLoading = false;
+             // return;
+            //}
+
+            const userId = this.searchQuery.trim();
+
+            const [recordsRes, vehiclesRes, licenseRes] = await Promise.all([
+              fetch(`${API_BASE}/records/${userId}`),
+              fetch(`${API_BASE}/vehicles/${userId}`),
+              fetch(`${API_BASE}/license/get/${userId}`)
+            ]);
+
+            if (recordsRes.status === 404) {
+              this.searchResult = null;
+              this.isLoading = false;
+              return;
+            }
+
+            const recordsData = recordsRes.ok ? await recordsRes.json() : null;
+            const vehiclesData = vehiclesRes.ok ? await vehiclesRes.json() : null;
+            const licenseData = licenseRes.ok ? await licenseRes.json() : null;
+
+            if (!recordsData || !recordsData.success) {
+              this.searchResult = null;
+              this.isLoading = false;
+              return;
+            }
+
+            const allRecords = recordsData.records || [];
+            const arrests = allRecords.filter(r => r.type === 'arrest');
+            const citations = allRecords.filter(r => r.type === 'citation');
+
+            const licenses = licenseData?.licenses || {};
+            const licenseStatus = licenses.licenseStatus || 'active';
+
+            const licenseList = [
+              {
+                type: "Driver's License",
+                status: licenseStatus.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : licenseStatus.toUpperCase()
+              },
+              {
+                type: 'CDL (Commercial Driver\'s License)',
+                status: licenses.cdl ? 'ISSUED' : 'NOT ISSUED'
+              },
+              {
+                type: 'MFIDC (Firearms)',
+                status: licenses.mfidc ? 'ACTIVE' : 'NOT ISSUED'
+              },
+              {
+                type: 'Fishing License',
+                status: licenses.fishingLicense ? 'ACTIVE' : 'NOT ISSUED'
+              },
+              {
+                type: 'Medical Certification',
+                status: licenses.medicalCertifications ? 'ACTIVE' : 'NOT ISSUED'
+              }
+            ];
+
+            this.searchResult = {
+              username: recordsData.username || 'Unknown',
+              userId: recordsData.robloxId || userId,
+              avatar: recordsData.avatar || null,
+              licenses: licenseList,
+              arrests,
+              citations,
+              vehicles: vehiclesData?.vehicles || []
+            };
+          } catch (err) {
+            console.error(err);
+            this.errorMessage = 'An error occurred while fetching records. Please try again.';
+            this.searchResult = null;
+          }
+
+          this.isLoading = false;
+        },
+
+        formatDate(isoString) {
+          if (!isoString) return '—';
+          const d = new Date(isoString);
+          return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+      }
+    }
+  </script>
+</body>
+</html>
