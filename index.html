@@ -38,7 +38,7 @@
       </div>
       <div class="pt-4 mt-2 border-t border-gray-200">
         <p class="text-xs uppercase font-bold text-[#6B6B6B] tracking-wider px-4 mb-2">info</p>
-        <p class="text-xs text-gray-500 px-4 leading-relaxed">Search by Roblox username or User ID. Display includes arrests, citations, vehicles, and license statuses.</p>
+        <p class="text-xs text-gray-500 px-4 leading-relaxed">Search by Roblox username or User ID. Display includes arrests, citations, vehicles, license statuses, and moderation history.</p>
       </div>
       <template x-if="errorMessage">
         <div class="mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded-[4px]">
@@ -235,6 +235,52 @@
                 </template>
               </div>
             </section>
+
+            <section class="bg-white border border-[#E1E4E8] rounded-[4px] overflow-hidden">
+              <div class="px-6 py-4 border-b border-[#E1E4E8] bg-gray-50 flex justify-between items-center">
+                <div>
+                  <h2 class="text-sm font-bold uppercase italic text-[#1F1F1F]">Moderation History</h2>
+                  <p class="text-[10px] text-gray-400 mt-1">Administrative actions issued against this player</p>
+                </div>
+                <span class="text-[10px] font-bold text-gray-400 uppercase" x-text="searchResult.modHistory?.length + ' Total'"></span>
+              </div>
+              <template x-if="searchResult.modHistory?.length > 0">
+                <div class="divide-y divide-[#E1E4E8]">
+                  <template x-for="entry in searchResult.modHistory" :key="entry._id">
+                    <div class="px-6 py-4 flex items-start gap-3">
+                      <span class="mt-0.5 text-[10px] font-bold px-2 py-1 rounded uppercase flex-shrink-0"
+                        :class="{
+                          'bg-red-100 text-red-700': entry.action === 'ban' || entry.action === 'kick',
+                          'bg-green-100 text-green-700': entry.action === 'unban',
+                          'bg-orange-100 text-orange-700': entry.action === 'warn' || entry.action === 'mute',
+                          'bg-gray-100 text-gray-600': !['ban','kick','unban','warn','mute'].includes(entry.action)
+                        }"
+                        x-text="entry.action"></span>
+                      <div class="flex-1">
+                        <p class="text-sm text-[#1F1F1F]" x-text="entry.reason || 'No reason provided.'"></p>
+                        <div class="text-xs text-gray-500 mt-1 flex items-center gap-1 flex-wrap">
+                          <span x-text="formatDate(entry.timestamp)"></span>
+                          <span>·</span>
+                          <span x-text="'Mod: ' + (entry.moderatorName || '—')"></span>
+                          <template x-if="entry.duration">
+                            <span class="text-orange-600 font-medium">· <span x-text="entry.duration"></span></span>
+                          </template>
+                          <template x-if="entry.issuedViaWeb">
+                            <span class="text-[9px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded uppercase font-bold">Web</span>
+                          </template>
+                          <span class="font-mono text-gray-400" x-text="'#' + entry._id.slice(-6).toUpperCase()"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!searchResult.modHistory?.length">
+                <div class="text-center py-10">
+                  <p class="text-gray-500 text-sm">No moderation history found.</p>
+                </div>
+              </template>
+            </section>
           </div>
         </template>
 
@@ -250,22 +296,6 @@
 
   <script>
     const API_BASE = 'https://api.stateofmadison.com/api/v1';
-
-    async function resolveRobloxUser(query) {
-      const isNumeric = /^\d+$/.test(query.trim());
-      if (isNumeric) {
-        return { userId: query.trim() };
-      }
-      const res = await fetch(`https://api.roproxy.com/v1/usernames/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernames: [query.trim()], excludeBannedUsers: false })
-      });
-      if (!res.ok) throw new Error('Failed to resolve username');
-      const data = await res.json();
-      if (!data.data || data.data.length === 0) return null;
-      return { userId: String(data.data[0].id), username: data.data[0].name };
-    }
 
     function recordsSearch() {
       return {
@@ -298,19 +328,12 @@
           this.expandedCitations = [];
 
           try {
-            //const resolved = await resolveRobloxUser(this.searchQuery.trim());
-            //if (!resolved) {
-              //this.searchResult = null;
-             // this.isLoading = false;
-             // return;
-            //}
-
-            const userId = this.searchQuery.trim();
+            const query = this.searchQuery.trim();
 
             const [recordsRes, vehiclesRes, licenseRes] = await Promise.all([
-              fetch(`${API_BASE}/records/${userId}`),
-              fetch(`${API_BASE}/vehicles/${userId}`),
-              fetch(`${API_BASE}/license/get/${userId}`)
+              fetch(`${API_BASE}/records/${query}`),
+              fetch(`${API_BASE}/vehicles/${query}`),
+              fetch(`${API_BASE}/license/get/${query}`)
             ]);
 
             if (recordsRes.status === 404) {
@@ -329,6 +352,11 @@
               return;
             }
 
+            const resolvedId = recordsData.robloxId;
+
+            const modRes = await fetch(`${API_BASE}/mod/getModerationHistory/${resolvedId}`);
+            const modData = modRes.ok ? await modRes.json() : null;
+
             const allRecords = recordsData.records || [];
             const arrests = allRecords.filter(r => r.type === 'arrest');
             const citations = allRecords.filter(r => r.type === 'citation');
@@ -342,7 +370,7 @@
                 status: licenseStatus.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : licenseStatus.toUpperCase()
               },
               {
-                type: 'CDL (Commercial Driver\'s License)',
+                type: "CDL (Commercial Driver's License)",
                 status: licenses.cdl ? 'ISSUED' : 'NOT ISSUED'
               },
               {
@@ -361,12 +389,13 @@
 
             this.searchResult = {
               username: recordsData.username || 'Unknown',
-              userId: recordsData.robloxId || userId,
+              userId: resolvedId || query,
               avatar: recordsData.avatar || null,
               licenses: licenseList,
               arrests,
               citations,
-              vehicles: vehiclesData?.vehicles || []
+              vehicles: vehiclesData?.vehicles || [],
+              modHistory: modData?.modHistory || []
             };
           } catch (err) {
             console.error(err);
